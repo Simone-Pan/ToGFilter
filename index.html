@@ -1,0 +1,3215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>神之塔角色筛选器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        /* 属性颜色定义 */
+        .bg-elem-红 { background-color: #ef4444; color: white; }
+        .bg-elem-蓝 { background-color: #3b82f6; color: white; }
+        .bg-elem-绿 { background-color: #22c55e; color: white; }
+        .bg-elem-黄 { background-color: #eab308; color: white; }
+        .bg-elem-紫 { background-color: #a855f7; color: white; }
+        
+        .text-elem-红 { color: #ef4444; }
+        .text-elem-蓝 { color: #3b82f6; }
+        .text-elem-绿 { color: #22c55e; }
+        .text-elem-黄 { color: #eab308; }
+        .text-elem-紫 { color: #a855f7; }
+		
+		.border-elem-红 { border-color: #ef4444; }
+		.border-elem-蓝 { border-color: #3b82f6; }
+		.border-elem-绿 { border-color: #22c55e; }
+		.border-elem-黄 { border-color: #eab308; }
+		.border-elem-紫 { border-color: #a855f7; }
+
+        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 12px 20px -5px rgba(0, 0, 0, 0.15); }
+        
+        /* 强制图片比例 200/262 */
+        .char-image-container {
+            width: 100%;
+            aspect-ratio: 200 / 262;
+            overflow: hidden;
+            background-color: #f3f4f6;
+        }
+        .char-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans">
+
+    <div id="app" class="container mx-auto px-4 py-8">
+        
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">角色图鉴筛选</h1>
+            <p class="text-gray-600">选择技能词条与属性，快速查找角色</p>
+        </header>
+
+        <div class="bg-white p-6 rounded-lg shadow-md mb-8 border-t-4 border-blue-500">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+				<div class="relative">
+                    <label class="block text-sm font-bold text-gray-700 mb-1">🔍 技能搜索</label>
+                    
+                    <div class="relative">
+                        <input 
+                            v-model="skillSearch" 
+                            type="text" 
+                            placeholder="输入关键词 (如: 无敌)" 
+                            class="w-full p-2 border-2 border-blue-100 bg-blue-50 rounded focus:border-blue-500 focus:outline-none placeholder-blue-300"
+                            @focus="showSuggestions = true"
+                            @blur="setTimeout(() => showSuggestions = false, 200)"
+                        >
+                        <button 
+                            v-if="skillSearch" 
+                            @click="skillSearch = ''" 
+                            class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-blue-500 font-bold"
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    <div 
+						v-if="showSuggestions && suggestedSkills.length > 0" 
+						class="absolute top-full left-0 w-full bg-white border border-gray-200 rounded-b shadow-xl z-50 max-h-60 overflow-y-auto"
+					>
+						<div 
+							v-for="skill in suggestedSkills" 
+							:key="skill" 
+							@click="selectSkill(skill)" 
+							class="p-2 hover:bg-blue-50 cursor-pointer text-sm text-gray-700 border-b border-gray-100 transition-colors"
+						>
+							{{ skill }}
+						</div>
+					</div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">属性</label>
+                    <select v-model="selectedElement" class="w-full p-2 border border-gray-300 rounded">
+                        <option value="">全部属性</option>
+                        <option v-for="elem in elements" :key="elem" :value="elem">{{ elem }}</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">职业</label>
+                    <select v-model="selectedJob" class="w-full p-2 border border-gray-300 rounded">
+                        <option value="">全部职业</option>
+                        <option v-for="job in jobs" :key="job" :value="job">{{ job }}</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">稀有度</label>
+                    <select v-model="selectedRarity" class="w-full p-2 border border-gray-300 rounded">
+                        <option value="">全部稀有度</option>
+                        <option v-for="rarity in rarities" :key="rarity" :value="rarity">{{ rarity }}</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="mt-2 text-xs text-gray-400 text-right">
+                当前显示: {{ filteredCharacters.length }} / {{ characters.length }} 位角色
+            </div>
+        </div>
+		
+		<div v-if="filteredCharacters.length > 0" class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2">
+			<a 
+                v-for="char in filteredCharacters" 
+                :key="char.id" 
+                :href="char.link" 
+                target="_blank"
+                class="block bg-white rounded-lg shadow overflow-hidden transition-all duration-300 card-hover cursor-pointer border-2"
+                :class="`border-elem-${char.element}`"
+            >
+				<div class="char-image-container relative">
+                    <img :src="char.image" :alt="char.name" class="char-image">
+                    
+                    <img 
+                        v-if="elementIcons[char.element]"
+                        :src="elementIcons[char.element]" 
+                        class="absolute top-0 left-0 w-auto h-10 z-10 drop-shadow-md"
+                        :alt="char.element"
+                    >
+                    
+                    <img 
+                        v-if="rarityIcons[char.rarity]"
+                        :src="rarityIcons[char.rarity]" 
+                        class="absolute bottom-0 left-0 w-auto h-12 z-10 drop-shadow-md"
+                        :alt="char.rarity"
+                    >
+                    <span v-else class="absolute bottom-1 left-1 text-[10px] font-bold text-white drop-shadow-md z-10">{{ char.rarity }}</span>
+
+                    <img 
+                        v-if="jobIcons[char.job]"
+                        :src="jobIcons[char.job]" 
+                        class="absolute bottom-0 right-0 w-auto h-10 z-10 drop-shadow-md"
+                        :alt="char.job"
+                    >
+                </div>
+                
+			<div class="p-2">
+				<h3 class="text-sm font-bold text-gray-800 truncate text-center">{{ char.name }}</h3>
+                    <div class="flex flex-wrap gap-1 justify-center">
+                        <span 
+							v-for="skill in char.skills" 
+							:key="skill"
+							class="px-1 py-0.5 text-[9px] bg-gray-100 text-gray-600 rounded border border-gray-200"
+							:class="{'bg-blue-100 border-blue-300 text-blue-700 font-bold': skillSearch && skill.includes(skillSearch)}"
+						>
+							{{ skill }}
+						</span>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div v-else class="text-center py-20 text-gray-400">
+            <div class="text-4xl mb-2">🔍</div>
+            <p>没有找到符合条件的角色</p>
+        </div>
+        
+    </div>
+
+    <script>
+        const { createApp, ref, computed } = Vue;
+
+        createApp({
+            setup() {
+				const elementIcons = {
+				                    "红": "https://conowen.com/tognw/miscellaneous/color_icons/UIT_Icon_FactionIconG_03_On.png",
+				                    "蓝": "https://conowen.com/tognw/miscellaneous/color_icons/UIT_Icon_FactionIconG_04_On.png",
+				                    "绿": "https://conowen.com/tognw/miscellaneous/color_icons/UIT_Icon_FactionIconG_05_On.png",
+				                    "黄": "https://conowen.com/tognw/miscellaneous/color_icons/UIT_Icon_FactionIconG_01_On.png",
+				                    "紫": "https://conowen.com/tognw/miscellaneous/color_icons/UIT_Icon_FactionIconG_02_On.png"
+				                };
+								
+				const jobIcons = {
+									"坦克": "https://conowen.com/tognw/miscellaneous/role_icons/withbackground/UIT_Icon_Role_1_Off.png",
+									"战士": "https://conowen.com/tognw/miscellaneous/role_icons/withbackground/UIT_Icon_Role_2_Off.png",
+									"刺客": "https://conowen.com/tognw/miscellaneous/role_icons/withbackground/UIT_Icon_Role_3_Off.png",
+									"弓手": "https://conowen.com/tognw/miscellaneous/role_icons/withbackground/UIT_Icon_Role_4_Off.png",
+									"法师": "https://conowen.com/tognw/miscellaneous/role_icons/withbackground/UIT_Icon_Role_5_Off.png",
+									"辅助": "https://conowen.com/tognw/miscellaneous/role_icons/withbackground/UIT_Icon_Role_6_Off.png"
+								};
+				
+								// 【新增】稀有度图标映射表 (这里我用了示例链接，你需要找对应的图)
+								// 如果没有稀有度图标，你可以用不同的边框颜色代替，或者找对应的图片
+								const rarityIcons = {
+									"EX": "https://conowen.com/tognw/miscellaneous/rarity_icons/UIT_Icon_Card_Rarity_7.png", 
+									"SSR+": "https://conowen.com/tognw/miscellaneous/rarity_icons/UIT_Icon_Card_Rarity_4.png",
+									"XSR+": "https://conowen.com/tognw/miscellaneous/rarity_icons/UIT_Icon_Card_Rarity_5.png", // 假设同 SSR+
+									"SSR": "https://conowen.com/tognw/miscellaneous/rarity_icons/UIT_Icon_Card_Rarity_3.png",
+									"SR": "https://conowen.com/tognw/miscellaneous/rarity_icons/UIT_Icon_Card_Rarity_2.png",
+									"R": "https://conowen.com/tognw/miscellaneous/rarity_icons/UIT_Icon_Card_Rarity_1.png"
+								};
+				
+                // 1. 角色数据 (已修复缺失的逗号)
+                const characters = ref([
+                    {
+                        id: 1,
+                        name: "[FUG首领]罗斯勒",
+                        element: "紫",
+                        job: "刺客",
+                        rarity: "EX",
+                        image: "https://conowen.com/tognw/units/images/thumbnails/0642_luslec_thumb_small.png", 
+                        skills: ["隐身", 
+						"解除隐身", 
+						"真伤",
+						"霸体",
+						"禁疗",
+						"禁充能",
+						"急救无敌",
+						"攻击力增加",
+						"命中增加",
+						"回避增加",
+						"减少急速",
+						"阻断能量恢复",
+						"防御力减少",
+						"减伤",
+						"减能"],
+                        link: "https://conowen.com/tognw/units/unit.php?id=165"
+                    },
+                    {
+                        id: 2,
+                        name: "[月下翼松]乌雷克·马奇努",
+                        element: "蓝",
+                        job: "战士",
+                        rarity: "EX",
+                        image: "https://conowen.com/tognw/units/images/thumbnails/0626_mazinoex_thumb_small.png",
+                        skills: [
+							"我军护盾", 
+							"技能中无敌",
+							"暴击率增加",
+							"减伤",
+							"物理抵抗减少",
+							"霸体",
+							"攻击力增加",
+							"必杀贯穿增加",
+							"限伤",
+							"物理贯穿增加",
+							"暴击抵抗增加",
+							"暴击抵抗减少",
+							"暴击伤害减少",
+							"物理抗性增加",
+							"真伤",
+							"减能",
+							"自身回能",
+							"击倒",
+							"麻痹",
+							"必中"
+						],
+                        link: "https://conowen.com/tognw/units/unit.php?id=153"
+                    },
+					{
+					    id: 3,
+					    name: "[家主]古斯特昂",
+					    element: "红",
+					    job: "法师",
+					    rarity: "EX",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0618_gustang_thumb_small.png",
+					    skills: [
+					        "技能中无敌",
+					        "静止",
+					        "眩晕",
+					        "物理贯穿增加",
+					        "减能",
+					        "沉默",
+					        "移速减少",
+					        "击退",
+					        "真伤",
+					        "霸体",
+					        "偷能",
+					        "必中",
+							"烧伤",
+							"自身回能",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "必杀贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=1"
+					},
+					{
+						id: 4,
+						name: "[家主]特洛伊梅莱",
+						element: "绿",
+						job: "辅助",
+						rarity: "EX",
+						image: "https://conowen.com/tognw/units/images/thumbnails/0605_traumerei_thumb_small.png",
+						skills: [
+							"霸体",
+							"击退",
+							"僵硬",
+							"攻击力增加",
+							"解除隐身",
+							"物理抵抗减少",
+							"急速减少",
+							"魔法抵抗减少",
+							"减能",
+							"破盾",
+							"真伤",
+							"沉默",
+							"自身无敌",
+							"防御力增加",
+							"魔法抵抗增加",
+							"物理抵抗增加",
+							"魔法贯穿增加"
+						],
+						link: "https://conowen.com/tognw/units/unit.php?id=2"
+					},
+					{
+					    id: 5,
+					    name: "[快船]伊文",
+					    element: "黄",
+					    job: "辅助",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0113_evan_thumb_small.png",
+					    skills: [
+					        "无敌",
+							"我军不死",
+					        "自身隐身",
+							"我军隐身",
+					        "击退",
+					        "自身回能",
+							"我军回能",
+					        "解除减益效果",
+							"我军免疫减益",
+					        "霸体",
+					        "防御力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=4"
+					},
+					{
+					    id: 6,
+					    name: "[数据]昆·爱德安",
+					    element: "黄",
+					    job: "弓手",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0260_dataedahn_thumb_small.png",
+					    skills: [
+					        "技能中无敌",
+					        "眩晕",
+					        "麻痹",
+					        "急速增加",
+					        "霸体",
+					        "防御力减少",
+					        "真伤",
+					        "攻击力增加",
+					        "急速减少",
+					        "偷能",
+					        "魔法抵抗增加",
+					        "命中增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=3"
+					},
+					{
+					    id: 7,
+					    name: "[数据]乌雷克·马奇努",
+					    element: "黄",
+					    job: "坦克",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0222_datamazino_thumb_small.png",
+					    skills: [
+					        "技能中无敌",
+					        "物理抵抗减少",
+					        "我军护盾",
+					        "眩晕",
+					        "物理抵抗增加",
+					        "击退",
+					        "击倒",
+					        "防御力增加",
+					        "急速增加",
+					        "攻击力减少",
+					        "自身回能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=5"
+					},
+					{
+					    id: 8,
+					    name: "[伟大家族]莲·梨朗",
+					    element: "黄",
+					    job: "法师",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0604_yirangorigin_thumb_small.png",
+					    skills: [
+					        "聚怪",
+					        "霸体",
+					        "眩晕",
+					        "自身回能",
+					        "攻击力增加",
+					        "技能中无敌"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=6"
+					},
+					{
+					    id: 9,
+					    name: "[数据]昆·阿塞西奥",
+					    element: "黄",
+					    job: "战士",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0430_asensio_thumb_small.png",
+					    skills: [
+					        "物理抵抗减少",
+					        "沉默",
+					        "必中",
+					        "霸体",
+					        "僵硬",
+					        "自身回能",
+					        "锁血",
+					        "命中增加",
+					        "必暴",
+					        "攻击力增加",
+					        "锁血",
+							"自身无敌",
+					        "物理贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=7"
+					},
+					{
+					    id: 10,
+					    name: "[克拉诺斯]赫·宥利",
+					    element: "黄",
+					    job: "战士",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0433_hayurikranos_thumb_small.png",
+					    skills: [
+					        "无敌",
+					        "禁疗",
+					        "斩杀",
+					        "霸体",
+					        "击倒",
+					        "阻断主动技能",
+					        "物理抵抗掠夺",
+					        "魔法抵抗掠夺",
+					        "魔法贯穿增加",
+					        "急速增加",
+					        "偷能",
+					        "必暴",
+					        "防御力增加",
+					        "攻击力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=8"
+					},
+					{
+					    id: 11,
+					    name: "[豪华]雨果",
+					    element: "黄",
+					    job: "刺客",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0621_hugo_thumb_small.png",
+					    skills: [
+					        "次数盾",
+					        "霸体",
+					        "攻击力掠夺",
+					        "防御力掠夺",
+					        "解除增益效果",
+					        "击退",
+					        "物理贯穿增加",
+					        "解除减益效果",
+					        "必中",
+					        "随减益数量增伤"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=9"
+					},
+					{
+					    id: 12,
+					    name: "[神水之图]阿右球斯球斯",
+					    element: "黄",
+					    job: "法师",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0223_augusgus_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "眩晕",
+					        "防御力减少",
+					        "攻击力增加",
+					        "攻速增加",
+					        "物理抵抗减少",
+					        "无敌",
+					        "回能",
+					        "急速增加",
+					        "黄属性抵抗减少",
+					        "必杀贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=141"
+					},
+					{
+					    id: 13,
+					    name: "[妖精剑]莎伦",
+					    element: "黄",
+					    job: "战士",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0434_sharon_thumb_small.png",
+					    skills: [
+					        "技能中无敌",
+					        "限伤",
+					        "攻击力增加",
+					        "防御力增加",
+					        "急速增加",
+					        "暴击抵抗减少",
+					        "倍率增加",
+					        "击倒",
+					        "暴击率增加",
+					        "坦伤",
+					        "自身回能",
+							"单体我军回能",
+					        "单体我军无敌",
+					        "挑衅"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=149"
+					},
+					{
+					    id: 14,
+					    name: "[太初人]查",
+					    element: "黄",
+					    job: "弓手",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0630_cha_thumb_small.png",
+					    skills: [
+					        "浮空",
+					        "无视部分防御",
+					        "攻击力增加",
+					        "防御力增加",
+					        "减能",
+					        "必暴",
+					        "次数盾",
+					        "急速减少",
+					        "攻速增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=154"
+					},
+					{
+					    id: 15,
+					    name: "不幸的操控使",
+					    element: "黄",
+					    job: "坦克",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0639_evelyn_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "浮空",
+					        "减伤",
+					        "防御力掠夺",
+					        "眩晕",
+					        "限伤",
+					        "减能",
+					        "急速减少",
+					        "攻击力减少",
+					        "防御力减少免疫",
+					        "必中",
+					        "自身无敌",
+					        "挑衅",
+					        "暴击抵抗减少",
+					        "暴击伤害减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=161"
+					},
+					{
+					    id: 16,
+					    name: "[hololive]森美声",
+					    element: "黄",
+					    job: "刺客",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0035_moricalliope_thumb_small.png",
+					    skills: [
+					        "魅惑",
+					        "物理抵抗减少",
+					        "自身隐身",
+					        "恐惧",
+					        "霸体",
+					        "麻痹",
+					        "召唤物",
+					        "防御力增加",
+					        "攻击力增加",
+					        "挑衅",
+					        "命中掠夺",
+					        "回避增加",
+					        "命中增加",
+					        "偷能",
+					        "必暴"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=10"
+					},
+					{
+					    id: 17,
+					    name: "[hololive]常暗永远",
+					    element: "黄",
+					    job: "辅助",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0036_tokoyamitowa_thumb_small.png",
+					    skills: [
+					        "物理抵抗减少",
+					        "魔法抵抗减少",
+					        "霸体",
+					        "防御力减少",
+					        "麻痹",
+					        "攻击力减少",
+					        "急速增加",
+					        "攻击力增加",
+					        "防御力增加",
+					        "解除有害效果",
+					        "我军无敌",
+					        "出血"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=11"
+					},
+					{
+					    id: 18,
+					    name: "[电枪]昆·玛斯洛尼",
+					    element: "紫",
+					    job: "弓手",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0201_mascheny_thumb_small.png",
+					    skills: [
+					        "急速掠夺",
+					        "技能中无敌",
+					        "僵硬",
+					        "急速增加",
+					        "自身护盾",
+					        "麻痹",
+					        "攻击力增加",
+					        "真伤",
+					        "霸体",
+					        "魔法贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=13"
+					},
+					{
+					    id: 19,
+					    name: "[铁甲]加拉加",
+					    element: "紫",
+					    job: "坦克",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0230_karaka_thumb_small.png",
+					    skills: [
+					        "挑衅",
+					        "霸体",
+					        "僵硬",
+					        "自身复活",
+					        "恐惧",
+					        "防御力减少",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "紫属性抵抗减少",
+					        "减伤",
+					        "解除有害效果",
+					        "防御力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=12"
+					},
+					{
+					    id: 20,
+					    name: "[数据]古斯特昂",
+					    element: "紫",
+					    job: "辅助",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0299_datagustang_thumb_small.png",
+					    skills: [
+					        "解除有害效果",
+					        "急速增加",
+					        "急速减少",
+					        "攻击力增加",
+					        "恢复量增加",
+					        "眩晕",
+					        "防御力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=14"
+					},
+					{
+					    id: 21,
+					    name: "[破裂的王位]白神",
+					    element: "紫",
+					    job: "战士",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0606_white_thumb_small.png",
+					    skills: [
+					        "技能中无敌",
+					        "魔法贯穿增加",
+					        "急速增加",
+					        "自身护盾",
+					        "魔法抵抗减少",
+					        "攻击力增加",
+					        "必杀贯穿增加",
+					        "霸体",
+					        "命中增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=15"
+					},
+					{
+					    id: 22,
+					    name: "[冥王]地狱乔",
+					    element: "紫",
+					    job: "法师",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0613_helljoe_thumb_small.png",
+					    skills: [
+					        "击退",
+					        "禁疗",
+					        "急速减少",
+					        "攻击力增加",
+					        "体力增加",
+					        "防御力减少",
+					        "解除有害效果",
+					        "急救无敌",
+					        "物理贯穿增加",
+					        "回能",
+					        "锁血",
+					        "必中",
+					        "必杀贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=16"
+					},
+					{
+					    id: 23,
+					    name: "[FUG干部]夏宥拉",
+					    element: "紫",
+					    job: "辅助",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0037_hayurafug_thumb_small.png",
+					    skills: [
+					        "回能",
+					        "锁血",
+					        "攻速增加",
+					        "霸体",
+					        "魔法抵抗减少",
+					        "物理抵抗减少",
+					        "攻击力增加",
+					        "防御力增加",
+					        "体力增加",
+					        "黄属性增伤",
+					        "物理贯穿增加",
+					        "魔法贯穿增加",
+					        "解除有害效果",
+					        "减少我军冷却"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=151"
+					},
+					{
+					    id: 24,
+					    name: "[鳐鱼]蕾哈尔",
+					    element: "紫",
+					    job: "法师",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0635_rachelray_thumb_small.webp",
+					    skills: [
+					        "技能中无敌",
+					        "击退",
+					        "防御力掠夺",
+					        "眩晕",
+					        "自身护盾",
+					        "防御力增加",
+					        "魔法贯穿增加",
+					        "次数盾",
+					        "必杀贯穿增加",
+					        "必暴"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=156"
+					},
+					{
+					    id: 25,
+					    name: "[莲之火焰}昆",
+					    element: "紫",
+					    job: "辅助",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0625_khunfire_thumb_small.png",
+					    skills: [
+					        "攻击力增加",
+					        "防御力增加",
+					        "霸体",
+					        "防御力减少",
+					        "我军护盾",
+					        "冰冻",
+					        "回能",
+					        "急救无敌",
+					        "魔法抵抗减少",
+					        "魔法贯穿增加",
+					        "解除有害效果"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=159"
+					},
+					{
+					    id: 26,
+					    name: "[刺儿]威傲来",
+					    element: "红",
+					    job: "弓手",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0001_viole_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "攻击力增加",
+					        "急速增加",
+					        "击退",
+					        "僵硬",
+					        "眩晕",
+					        "红属性急速增加",
+					        "回能",
+					        "减能免疫",
+					        "自身无敌",
+					        "攻速增加",
+					        "基本攻击贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=17"
+					},
+					{
+					    id: 27,
+					    name: "[炼狱之火]伊凡科尔",
+					    element: "红",
+					    job: "法师",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0258_evankhell_thumb_small.png",
+					    skills: [
+					        "技能中无敌",
+					        "击倒",
+					        "聚怪",
+					        "霸体",
+					        "能量恢复减少",
+					        "必暴",
+					        "回能",
+					        "体力恢复减少",
+					        "红属性抵抗减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=18"
+					},
+					{
+					    id: 28,
+					    name: "[觉醒]雷克",
+					    element: "红",
+					    job: "坦克",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0603_awakerak_thumb_small.png",
+					    skills: [
+					        "浮空",
+					        "减伤",
+					        "霸体",
+					        "封印",
+					        "挑衅",
+					        "次数盾",
+					        "攻击力减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=19"
+					},
+					{
+					    id: 29,
+					    name: "[古代怪物]夏镇成",
+					    element: "红",
+					    job: "刺客",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0229_jinsung_thumb_small.png",
+					    skills: [
+					        "物理抵抗减少",
+					        "眩晕",
+						"阻断能量恢复",
+					        "技能中无敌",
+					        "击退",
+					        "减能",
+					        "静止",
+					        "减伤",
+					        "攻击力增加",
+					        "回能",
+					        "必暴",
+					        "偷能",
+					        "禁疗",
+					        "必中",
+						"忽视部分回避",
+					        "开局无敌"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=20"
+					},
+					{
+					    id: 30,
+					    name: "[灵魂碎片]阿柏大",
+					    element: "红",
+					    job: "辅助",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0421_albelda_thumb_small.png",
+					    skills: [
+					        "解除有害效果",
+					        "单体我军无敌",
+					        "霸体",
+					        "攻击力减少",
+					        "防御力减少",
+					        "封印",
+					        "次数盾",
+					        "攻击力增加",
+					        "防御力增加",
+					        "不被指定为攻击目标",
+					        "回能",
+					        "急速增加",
+					        "急速减少",
+					        "减少我军冷却"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=21"
+					},
+					{
+					    id: 31,
+					    name: "[精英间谍]夏夏",
+					    element: "红",
+					    job: "辅助",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0623_spyxia_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "攻击力增加",
+					        "麻痹",
+					        "反伤",
+					        "防御力减少",
+					        "急救无敌",
+					        "物理抵抗减少",
+					        "魔法抵抗减少",
+					        "我军无敌",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "自身回能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=24"
+					},
+					{
+					    id: 32,
+					    name: "[脱离者]贝塔",
+					    element: "红",
+					    job: "刺客",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0247_beta_thumb_small.webp",
+					    skills: [
+					        "浮空",
+					        "攻击力增加",
+					        "魔法贯穿增加",
+					        "击倒",
+					        "解除有害效果",
+					        "锁血",
+					        "破盾",
+					        "自身回能",
+					        "霸体",
+					        "魔法抵抗减少",
+					        "必杀贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=147"
+					},
+					{
+					    id: 33,
+					    name: "[疯子]蒂亚勒",
+					    element: "红",
+					    job: "法师",
+					    rarity: "SSR+",
+					    image: "",
+					    skills: [
+					        "浮空",
+					        "减能",
+					        "偷能",
+					        "解除增益效果",
+					        "急救无敌",
+					        "自身无敌",
+					        "攻击力增加",
+					        "防御力增加",
+					        "减伤",
+					        "解除有害效果",
+					        "魔法贯穿增加",
+					        "必暴",
+					        "必杀贯穿增加"
+					    ],
+					    link: ""
+					},
+					{
+					    id: 34,
+					    name: "[少年佣兵]柳亦真",
+					    element: "红",
+					    job: "战士",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0608_yuijin_thumb_small.png",
+					    skills: [
+					        "浮空",
+					        "出血",
+					        "回避增加",
+					        "霸体",
+					        "禁疗",
+					        "必定回避",
+					        "红属性攻击力增加",
+					        "减伤",
+					        "物理贯穿增加",
+					        "自身回能",
+					        "减能",
+					        "必暴",
+					        "攻击力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/images/thumbnails/0608_yuijin_thumb_small.png"
+					},
+					{
+					    id: 35,
+					    name: "[丛林]艾丽丝",
+					    element: "红",
+					    job: "弓手",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0609_alice_thumb_small.png",
+					    skills: [
+					        "回避减少",
+					        "失明",
+					        "真伤",
+					        "暴击伤害增加",
+					        "自身隐身",
+					        "眩晕",
+					        "攻击力增加",
+					        "必暴"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=23"
+					},
+					{
+					    id: 36,
+					    name: "[飞翔]乌雷克·马奇努",
+					    element: "蓝",
+					    job: "战士",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0221_mazino_thumb_small.png",
+					    skills: [
+					        "击退",
+					        "急速增加",
+					        "眩晕",
+					        "我军护盾",
+					        "急速减少",
+					        "麻痹",
+					        "攻击力增加",
+					        "防御力增加",
+					        "解除增益效果",
+					        "霸体",
+					        "急速掠夺",
+					        "必杀贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=26"
+					},
+					{
+					    id: 37,
+					    name: "[数据]昆·玛斯洛尼",
+					    element: "蓝",
+					    job: "刺客",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0202_datamascheny_thumb_small.png",
+					    skills: [
+					        "锁血",
+					        "魔法抵抗减少",
+					        "技能中无敌",
+					        "减伤",
+					        "霸体",
+					        "攻击力增加",
+					        "麻痹",
+					        "急速增加",
+					        "必暴"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=25"
+					},
+					{
+					    id: 38,
+					    name: "[支配者]凯撒",
+					    element: "蓝",
+					    job: "弓手",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0301_kaiser_thumb_small.png",
+					    skills: [
+					        "封锁",
+					        "必暴",
+					        "基本攻击抵抗减少",
+					        "霸体",
+					        "基本攻击贯穿增加",
+					        "击退",
+					        "眩晕",
+					        "次数盾",
+					        "攻击力减少",
+					        "出血",
+					        "物理贯穿增加",
+					        "解除有害效果",
+					        "攻速增加",
+					        "命中增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=28"
+					},
+					{
+					    id: 39,
+					    name: "[隐居者]珈蓝",
+					    element: "蓝",
+					    job: "辅助",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0403_garam_thumb_small.png",
+					    skills: [
+					        "魔法抵抗减少",
+					        "物理抵抗减少",
+					        "技能中无敌",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "必杀贯穿增加",
+					        "防御力减少",
+					        "我军回能",
+					        "封印",
+					        "击倒",
+					        "解除有害效果",
+					        "解除增益效果",
+					        "禁疗",
+					        "攻击力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=29"
+					},
+					{
+					    id: 40,
+					    name: "[革命]第二十五夜",
+					    element: "蓝",
+					    job: "法师",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0612_bamrevolution_thumb_small.png",
+					    skills: [
+					        "浮空",
+					        "技能中无敌",
+					        "击退",
+					        "防御力减少",
+					        "沉默",
+					        "自身回能",
+					        "急速减少",
+					        "移速减少",
+					        "必杀贯穿增加",
+					        "魔法贯穿增加",
+					        "吸血增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=30"
+					},
+					{
+					    id: 41,
+					    name: "[勿忘我]桃源",
+					    element: "蓝",
+					    job: "法师",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0607_dowon_thumb_small.png",
+					    skills: [
+					        "不被指定为攻击目标",
+					        "击倒",
+					        "攻击力增加",
+					        "蓝属性攻击力增加",
+					        "攻击力减少",
+					        "物理贯穿增加",
+					        "自身护盾",
+					        "我军护盾",
+					        "霸体",
+					        "我军回能",
+					        "无视部分防御"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=31"
+					},
+					{
+					    id: 42,
+					    name: "[笼子的主人]阎王",
+					    element: "蓝",
+					    job: "坦克",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0615_yama_thumb_small.png",
+					    skills: [
+					        "挑衅",
+					        "减伤",
+					        "浮空",
+					        "攻击力减少",
+					        "减能",
+					        "攻击力增加",
+					        "防御力增加",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "防御力减少",
+					        "物理抵抗减少",
+					        "必杀贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=32"
+					},
+					{
+					    id: 43,
+					    name: "[影子人]阿菲奈",
+					    element: "蓝",
+					    job: "辅助",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0405_alphine_thumb_small.webp",
+					    skills: [
+					        "霸体",
+					        "召唤物",
+					        "封锁",
+					        "真伤",
+					        "回避减少",
+					        "命中减少",
+					        "自身隐身",
+					        "我军隐身",
+					        "防御力增加",
+					        "体力增加",
+					        "攻击力减少",
+					        "自身回能",
+					        "偷能",
+					        "防御力减少",
+					        "我军回能",
+					        "魔法抵抗减少",
+					        "物理抵抗减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=146"
+					},
+					{
+					    id: 44,
+					    name: "[天上天下唯我独尊]艾斯卡诺",
+					    element: "蓝",
+					    job: "坦克",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0032_escanor_thumb_small.png",
+					    skills: [
+					        "眩晕",
+					        "必暴",
+					        "物理贯穿增加",
+					        "挑衅",
+					        "暴击抵抗增加",
+					        "聚怪",
+					        "移速减少",
+					        "霸体",
+					        "攻击力减少",
+					        "魔法抵抗增加",
+					        "物理抵抗增加",
+					        "体力增加",
+					        "攻击力增加",
+					        "防御力增加",
+					        "自身无敌",
+					        "锁血",
+					        "体力恢复减少",
+					        "解除减益效果"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=27"
+					},
+					{
+					    id: 45,
+					    name: "[数据]吉黑德",
+					    element: "绿",
+					    job: "战士",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0259_datazahard_thumb_small.png",
+					    skills: [
+					        "击倒",
+					        "出血",
+					        "烧伤",
+					        "防御力减少",
+					        "技能中无敌",
+					        "回避增加",
+					        "僵硬",
+					        "眩晕",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+						"锁血",
+					        "沉默",
+					        "击退",
+					        "自身无敌",
+					        "破盾",
+					        "攻击力增加",
+					        "必暴"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=33"
+					},
+					{
+					    id: 46,
+					    name: "[处决者]莱恩",
+					    element: "绿",
+					    job: "法师",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0102_lopobiaren_thumb_small.png",
+					    skills: [
+					        "眩晕",
+					        "魔法抵抗减少",
+					        "自身回能",
+					        "攻击力增加",
+					        "召唤物",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "浮空",
+					        "物理抵抗减少",
+					        "急速增加",
+					        "移速增加",
+					        "自身无敌",
+					        "技能中无敌"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=34"
+					},
+					{
+					    id: 47,
+					    name: "[甄选人员]赫·宥莉",
+					    element: "绿",
+					    job: "刺客",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0011_hayuriteen_thumb_small.png",
+					    skills: [
+					        "僵硬",
+					        "挑衅",
+					        "霸体",
+					        "锁血",
+					        "击退",
+					        "吸血增加",
+					        "击倒",
+					        "挑衅免疫",
+					        "攻击力增加",
+					        "急速减少免疫",
+					        "攻击力减少免疫",
+					        "必中",
+					        "技能中无敌",
+					        "防御力减少免疫",
+					        "防御力增加",
+					        "物理贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=36"
+					},
+					{
+					    id: 48,
+					    name: "[治愈火焰]莲·梨花",
+					    element: "绿",
+					    job: "辅助",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0033_yeonehwacure_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "解除增益效果",
+					        "减能",
+					        "急救无敌",
+					        "单体我军霸体",
+					        "防御力增加",
+					        "技能中无敌",
+					        "解除有害效果"
+					    ],
+					    link: "https://conowen.com/tognw/units/images/thumbnails/0033_yeonehwacure_thumb_small.png"
+					},
+					{
+					    id: 49,
+					    name: "[乌有精髓]卡拉班",
+					    element: "绿",
+					    job: "坦克",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0404_kallavan_thumb_small.png",
+					    skills: [
+					        "僵硬",
+					        "必中",
+					        "眩晕",
+					        "物理贯穿增加",
+					        "魔法抵抗增加",
+					        "物理抵抗增加",
+					        "防御力增加",
+					        "击退",
+					        "攻击力增加",
+					        "无视伤害",
+					        "必杀贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=38"
+					},
+					{
+					    id: 50,
+					    name: "[善变的智谋家]亚斯拉琪",
+					    element: "绿",
+					    job: "刺客",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0617_yasratcha_thumb_small.png",
+					    skills: [
+					        "眩晕",
+					        "真伤",
+					        "魔法抵抗减少",
+					        "烫伤",
+					        "自身无敌",
+					        "偷能",
+					        "必中",
+					        "魔法贯穿增加",
+					        "霸体",
+					        "必杀贯穿增加",
+					        "减伤",
+					        "减能免疫",
+					        "自身护盾"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=39"
+					},
+					{
+					    id: 51,
+					    name: "[来历不明的]吉黑德公主",
+					    element: "绿",
+					    job: "战士",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0629_theprincess_thumb_small.webp",
+					    skills: [
+					        "物理抵抗减少",
+					        "蓝属性增伤",
+					        "静止",
+					        "急速增加",
+					        "物理贯穿增加",
+					        "攻击力增加",
+					        "无视部分防御",
+					        "命中增加",
+					        "暴击率增加",
+					        "霸体",
+					        "回避攻击",
+					        "根据增益增伤",
+					        "技能冷却减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=143"
+					},
+					{
+					    id: 52,
+					    name: "[破碎的时间]亚罗拉",
+					    element: "绿",
+					    job: "战士",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0627_aria_thumb_small.png",
+					    skills: [
+					        "僵硬",
+					        "霸体",
+					        "剩余冷却时间增加",
+					        "攻击力增加",
+					        "回避增加",
+					        "击倒",
+					        "自身无敌",
+					        "偷能",
+					        "锁血"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=158"
+					},
+					{
+					    id: 53,
+					    name: "[奇美拉]拉什特",
+					    element: "绿",
+					    job: "法师",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0633_rashut_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "不被指定为攻击目标",
+					        "必杀贯穿增加",
+					        "次数盾",
+					        "偷能",
+					        "聚怪",
+					        "吸血增加",
+					        "自身回能",
+					        "命中增加",
+					        "魔法贯穿增加",
+					        "眩晕",
+					        "禁疗"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=162"
+					},
+					{
+					    id: 54,
+					    name: "[野战司令官]罗拔顿",
+					    element: "绿",
+					    job: "坦克",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0622_robadon_thumb_small.png",
+					    skills: [
+					        "限伤",
+					        "锁血",
+					        "击退",
+					        "真伤",
+					        "急速减少",
+					        "减能",
+					        "无视伤害",
+					        "绿属性急救无敌",
+					        "减伤"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=164"
+					},
+					{
+					    id: 55,
+					    name: "[凤凰君主]蕾茜儿",
+					    element: "绿",
+					    job: "弓手",
+					    rarity: "SSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0024_rachelagni_thumb_small.png",
+					    skills: [
+					        "击退",
+					        "必暴",
+					        "暴击率增加",
+					        "霸体",
+					        "急速减少免疫",
+					        "攻速减少免疫",
+					        "绿属性抵抗减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=35"
+					},
+					{
+					    id: 56,
+					    name: "[甄选人员]昆·爱德安",
+					    element: "黄",
+					    job: "弓手",
+					    rarity: "XSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/3007_edahnregular_thumb_small.png",
+					    skills: [
+					        "麻痹",
+					        "必中",
+					        "眩晕",
+					        "急速增加",
+					        "次数盾",
+					        "急速减少",
+					        "攻击力增加",
+					        "防御力减少",
+					        "真伤",
+					        "自身回能",
+					        "攻速增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=160"
+					},
+					{
+					    id: 57,
+					    name: "[甄选人员]昆·玛斯洛尼",
+					    element: "紫",
+					    job: "弓手",
+					    rarity: "XSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/3004_maschenyregular_thumb_small.png",
+					    skills: [
+					        "僵硬",
+					        "技能中无敌",
+					        "急速增加",
+					        "自身护盾",
+					        "麻痹",
+					        "自身回能",
+					        "急速掠夺"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=150"
+					},
+					{
+					    id: 58,
+					    name: "[吸血鬼伯爵]夏镇成",
+					    element: "红",
+					    job: "刺客",
+					    rarity: "XSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/3008_jinsungblood_thumb_small.png",
+					    skills: [
+					        "眩晕",
+					        "技能中无敌",
+					        "阻断能量恢复",
+					        "物理抵抗减少",
+					        "击退",
+					        "减伤",
+					        "霸体",
+					        "静止",
+					        "攻击力增加",
+					        "忽视部分回避",
+					        "偷能",
+					        "开局无敌",
+					        "必中"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=163"
+					},
+					{
+					    id: 59,
+					    name: "[非甄选人员]乌雷克·马奇努",
+					    element: "蓝",
+					    job: "战士",
+					    rarity: "XSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/3003_mazinossr_thumb_small.webp",
+					    skills: [
+					        "眩晕",
+					        "击退",
+					        "急速增加",
+					        "急速减少",
+					        "我军护盾",
+					        "自身护盾",
+					        "麻痹",
+					        "攻击力增加",
+					        "防御力增加",
+					        "解除增益效果",
+					        "霸体",
+					        "体力增加",
+					        "自身无敌",
+					        "减能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=144"
+					},
+					{
+					    id: 60,
+					    name: "[名誉猎手]凯撒",
+					    element: "蓝",
+					    job: "弓手",
+					    rarity: "XSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/3001_kaiserhunter_thumb_small.webp",
+					    skills: [
+					        "封锁",
+					        "必暴",
+					        "基本攻击抵抗减少",
+					        "霸体",
+					        "基本攻击贯穿增加",
+					        "次数盾",
+					        "眩晕",
+					        "击退",
+					        "出血",
+					        "物理贯穿增加",
+					        "攻速增加",
+					        "解除减益效果",
+					        "蓝属性基本攻击贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=145"
+					},
+					{
+					    id: 61,
+					    name: "[吉黑德公主]珈蓝",
+					    element: "蓝",
+					    job: "辅助",
+					    rarity: "XSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/3005_garamprincess_thumb_small.png",
+					    skills: [
+					        "眩晕",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "必杀贯穿增加",
+					        "我军回能",
+					        "霸体",
+					        "防御力减少",
+					        "封印",
+					        "击倒",
+					        "解除有害效果",
+					        "解除增益效果",
+					        "魔法抵抗减少",
+					        "物理抵抗减少",
+					        "禁疗",
+					        "自身护盾",
+					        "自身无敌",
+					        "自身回能",
+					        "攻击力减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=152"
+					},
+					{
+					    id: 62,
+					    name: "[隐藏花园]桃源",
+					    element: "蓝",
+					    job: "法师",
+					    rarity: "XSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/3006_dowonhide_thumb_small.png",
+					    skills: [
+					        "击倒",
+					        "蓝属性攻击力增加",
+					        "我军护盾",
+					        "自身护盾",
+					        "攻击力减少",
+					        "攻击力增加",
+					        "不被指定为攻击目标",
+					        "霸体",
+					        "自身回能",
+					        "我军回能",
+					        "无视部分防御力",
+					        "蓝属性剩余冷却时间减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=155"
+					},
+					{
+					    id: 63,
+					    name: "[冒险家]吉黑德",
+					    element: "绿",
+					    job: "战士",
+					    rarity: "XSR+",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/30095_datazahard_thumb_small.png",
+					    skills: [
+					        "破盾",
+					        "出血",
+					        "防御力减少",
+					        "击倒",
+					        "烧伤",
+					        "技能中无敌",
+					        "僵硬",
+					        "眩晕",
+					        "沉默",
+					        "击退",
+					        "魔法抵抗增加",
+					        "回避增加",
+					        "锁血",
+					        "物理抵抗增加",
+					        "绿属性剩余冷却时间减少",
+					        "回避减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=40"
+					},
+					{
+					    id: 64,
+					    name: "[黑色三月]夜",
+					    element: "黄",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0010_bam_thumb_small.png",
+					    skills: [
+					        "减能",
+					        "霸体",
+					        "眩晕",
+					        "攻击力增加",
+					        "防御力增加",
+					        "静止",
+					        "我军回能",
+					        "自身回能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=41"
+					},
+					{
+					    id: 65,
+					    name: "[猎手]雷克",
+					    element: "黄",
+					    job: "坦克",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0007_rak_thumb_small.png",
+					    skills: [
+					        "技能中无敌",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "防御力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=50"
+					},
+					{
+					    id: 66,
+					    name: "[压缩]雷克",
+					    element: "黄",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0106_rakcompression_thumb_small.png",
+					    skills: [
+					        "僵硬",
+					        "霸体",
+					        "必暴",
+					        "眩晕",
+					        "物理贯穿增加",
+					        "自身回能",
+					        "无视部分防御力",
+					        "暴击伤害增加",
+					        "暴击率增加",
+					        "攻击力增加",
+					        "急速增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=51"
+					},
+					{
+					    id: 67,
+					    name: "[二刀流]哈驰",
+					    element: "黄",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0009_hatz_thumb_small.png",
+					    skills: [
+					        "必暴",
+					        "击退",
+					        "僵硬",
+					        "暴击率增加",
+					        "急速增加",
+					        "技能中无敌",
+					        "回避增加",
+					        "命中增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=47"
+					},
+					{
+					    id: 68,
+					    name: "[杀人武术]什伊树",
+					    element: "黄",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0108_shibisu_thumb_small.png",
+					    skills: [
+					        "物理抵抗减少",
+					        "魔法抵抗减少",
+					        "自身回能",
+					        "能量获得减少",
+					        "眩晕",
+					        "黄属性攻击力增加",
+					        "急速增加",
+					        "攻击力增加",
+					        "防御力减少",
+					        "自身无敌",
+					        "魔法抵抗增加",
+					        "物理抵抗增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=52"
+					},
+					{
+					    id: 69,
+					    name: "[骑士]洪天火",
+					    element: "黄",
+					    job: "刺客",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0112_hongcheonhwa_thumb_small.png",
+					    skills: [
+					        "防御力减少",
+					        "击倒",
+					        "挑衅",
+					        "物理抵抗减少",
+					        "减伤",
+					        "暴击率增加",
+					        "攻击力增加",
+					        "防御力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=42"
+					},
+					{
+					    id: 70,
+					    name: "[备考生]吉王男",
+					    element: "黄",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0203_wangnan_thumb_small.png",
+					    skills: [
+					        "必暴",
+					        "僵硬",
+					        "暴击率增加",
+					        "暴击伤害增加",
+					        "自身复活",
+					        "攻击力增加",
+					        "黄属性急速增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=55"
+					},
+					{
+					    id: 71,
+					    name: "[火焰师]莲·梨花",
+					    element: "黄",
+					    job: "法师",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0008_yeonehwa_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "击退",
+					        "自身护盾",
+					        "防御力减少",
+					        "攻击力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=56"
+					},
+					{
+					    id: 72,
+					    name: "[黄羽]金鸡汤",
+					    element: "黄",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0228_gyetang_thumb_small.png",
+					    skills: [
+					        "攻速增加",
+					        "魔法抵抗减少",
+					        "霸体"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=46"
+					},
+					{
+					    id: 73,
+					    name: "[蜜蜂]伟士波",
+					    element: "黄",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0242_vespa_thumb_small.png",
+					    skills: [
+					        "中毒",
+					        "麻痹",
+					        "霸体",
+					        "必暴",
+					        "我军免疫持续伤害",
+					        "黄属性防御力增加",
+					        "急速掠夺",
+					        "攻击力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=57"
+					},
+					{
+					    id: 74,
+					    name: "[东海]哈驰",
+					    element: "黄",
+					    job: "坦克",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0285_hatzswordman_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "解除减益效果",
+					        "解除异常状态",
+					        "我军霸体",
+					        "眩晕",
+					        "封锁",
+					        "防御力减少",
+					        "僵硬",
+					        "防御力增加",
+					        "自身回能",
+					        "减伤"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=48"
+					},
+					{
+					    id: 75,
+					    name: "[冰封之枪]昆·阿圭罗",
+					    element: "黄",
+					    job: "刺客",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0429_frostykhun_thumb_small.png",
+					    skills: [
+					        "防御力减少",
+					        "冰冻",
+					        "急速减少",
+					        "霸体",
+					        "禁疗",
+					        "魔法抵抗减少",
+					        "魔法贯穿增加",
+					        "自身护盾",
+					        "无视部分防御力",
+					        "必中",
+					        "减能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=49"
+					},
+					{
+					    id: 76,
+					    name: "[智谋家]昆·阿圭罗",
+					    element: "紫",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0002_khun_thumb_small.png",
+					    skills: [
+					        "防御力减少",
+					        "麻痹",
+					        "封印",
+					        "魔法抵抗减少",
+					        "物理抵抗减少",
+					        "我军护盾",
+					        "我军回能",
+					        "紫属性攻击力增加",
+					        "急速增加",
+					        "急速减少",
+					        "减能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=64"
+					},
+					{
+					    id: 77,
+					    name: "[少女]蕾哈尔",
+					    element: "紫",
+					    job: "法师",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0109_rachel_thumb_small.png",
+					    skills: [
+					        "击倒",
+					        "防御力增加",
+					        "眩晕",
+					        "偷能",
+					        "急速减少",
+					        "防御力减少",
+					        "聚怪",
+					        "自身回能",
+					        "我军回能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=70"
+					},
+					{
+					    id: 78,
+					    name: "[公主]安德罗西",
+					    element: "紫",
+					    job: "刺客",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0003_endorsi_thumb_small.png",
+					    skills: [
+					        "技能中无敌",
+					        "击倒",
+					        "出血",
+					        "霸体",
+					        "屏蔽能量恢复",
+					        "防御力减少",
+					        "攻击力增加",
+					        "防御力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=61"
+					},
+					{
+					    id: 79,
+					    name: "[操纵使]单于·娜莱",
+					    element: "紫",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0110_naraeseonwoo_thumb_small.png",
+					    skills: [
+					        "次数盾",
+					        "眩晕",
+					        "防御力减少",
+					        "偷能",
+					        "封锁",
+					        "单体我军回能",
+					        "单体我军无敌",
+					        "自身回能",
+					        "攻击力增加",
+					        "防御力增加",
+					        "魔法抵抗减少",
+					        "物理抵抗减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=68"
+					},
+					{
+					    id: 80,
+					    name: "[暗黑深渊]恶灵",
+					    element: "紫",
+					    job: "坦克",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0120_ghost_thumb_small.png",
+					    skills: [
+					        "魔法抵抗减少",
+					        "霸体",
+					        "挑衅",
+					        "魔法抵抗增加",
+					        "暴击伤害抵抗增加",
+					        "自身护盾",
+					        "解除减益效果"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=62"
+					},
+					{
+					    id: 81,
+					    name: "[恶魔碎片]华奎因",
+					    element: "紫",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0005_hoaquin_thumb_small.png",
+					    skills: [
+					        "僵硬",
+					        "霸体",
+					        "物理抵抗减少",
+					        "攻击力增加",
+					        "减伤"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=63"
+					},
+					{
+					    id: 82,
+					    name: "[紫色]普林斯",
+					    element: "紫",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0214_prince_thumb_small.png",
+					    skills: [
+					        "急速减少",
+					        "僵硬",
+					        "魔法抵抗减少",
+					        "解除减益效果",
+					        "攻击力增加",
+					        "防御力增加",
+					        "防御力减少",
+					        "魔法抵抗增加",
+					        "物理抵抗增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=69"
+					},
+					{
+					    id: 83,
+					    name: "[放贷人]金佐藤",
+					    element: "紫",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0205_kimlurker_thumb_small.png",
+					    skills: [
+					        "浮空",
+					        "眩晕",
+					        "防御力减少",
+					        "魔法抵抗减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=66"
+					},
+					{
+					    id: 84,
+					    name: "[刺客]昆·齐赛娅",
+					    element: "紫",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0015_kiseia_thumb_small.png",
+					    skills: [
+					        "破盾",
+					        "暴击率增加",
+					        "眩晕",
+					        "出血",
+					        "自身隐身",
+					        "技能中无敌",
+					        "紫属性攻击力增加",
+					        "封锁",
+					        "紫属性爆伤增加",
+					        "无视部分防御力"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=65"
+					},
+					{
+					    id: 85,
+					    name: "[玩偶师]维尔第",
+					    element: "紫",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0241_verdi_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "紫属性抵抗减少",
+					        "眩晕",
+					        "攻击力增加",
+					        "击退",
+					        "急速增加",
+					        "僵硬",
+					        "攻速增加",
+					        "无视部分防御力"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=76"
+					},
+					{
+					    id: 86,
+					    name: "[偶像]夏宥拉",
+					    element: "紫",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0418_hayura_thumb_small.png",
+					    skills: [
+					        "攻击力增加",
+					        "防御力增加",
+					        "紫属性急速增加",
+					        "紫对黄增伤",
+					        "我军回能",
+					        "沉默",
+					        "急救无敌",
+					        "自身回能",
+					        "紫属性攻速增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=79"
+					},
+					{
+					    id: 87,
+					    name: "[女儿杀手]比比",
+					    element: "紫",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0014_vivi_thumb_small.png",
+					    skills: [
+					        "真伤",
+					        "技能中无敌",
+					        "挑衅",
+					        "攻速增加",
+					        "必暴",
+					        "禁疗",
+					        "命中增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=77"
+					},
+					{
+					    id: 88,
+					    name: "[狂犬]巴拉加夫",
+					    element: "紫",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0245_varagarv_thumb_small.png",
+					    skills: [
+					        "禁疗",
+					        "自身护盾",
+					        "击退",
+					        "紫属性防御力增加",
+					        "急救无敌",
+					        "物理抵抗减少",
+					        "体力增加",
+					        "霸体"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=75"
+					},
+					{
+					    id: 89,
+					    name: "[黑影]里普尔里索",
+					    element: "紫",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0235_reflejo_thumb_small.png",
+					    skills: [
+					        "浮空",
+					        "技能中无敌",
+					        "限伤",
+					        "物理抵抗掠夺",
+					        "魔法抵抗掠夺",
+					        "回避掠夺",
+					        "防御力增加",
+					        "攻速增加",
+					        "封印",
+					        "减能",
+					        "物理贯穿增加",
+					        "回避减少",
+					        "魔法抵抗减少",
+					        "物理抵抗减少",
+					        "偷能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=71"
+					},
+					{
+					    id: 90,
+					    name: "[灵魂守卫]艾娜",
+					    element: "紫",
+					    job: "法师",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0422_anna_thumb_small.png",
+					    skills: [
+					        "僵硬",
+					        "召唤物",
+					        "必暴",
+					        "攻击力增加",
+					        "攻速增加",
+					        "次数盾",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "恐惧",
+					        "击倒",
+					        "霸体",
+					        "暴击伤害增加",
+					        "无视部分防御力",
+					        "沉默"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=58"
+					},
+					{
+					    id: 91,
+					    name: "[被释放的欲望]戴维",
+					    element: "紫",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0624_david_thumb_small.png",
+					    skills: [
+					        "攻击力增加",
+					        "我军减益免疫",
+					        "霸体",
+					        "我军回能",
+					        "减伤",
+					        "偷能",
+					        "防御力增加",
+					        "物理贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=60"
+					},
+					{
+					    id: 92,
+					    name: "[被折断的翅膀]伊卡洛斯",
+					    element: "紫",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0616_icarus_thumb_small.webp",
+					    skills: [
+					        "防御力增加",
+					        "紫属性剩余冷却时间减少",
+					        "霸体",
+					        "沉默",
+					        "紫属性防御增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=142"
+					},
+					{
+					    id: 93,
+					    name: "[命运之途]花莲",
+					    element: "红",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0101_hwaryun_thumb_small.png",
+					    skills: [
+					        "攻击力增加",
+					        "暴击率增加",
+					        "我军回能",
+					        "急速增加",
+					        "急速减少",
+					        "眩晕",
+					        "自身护盾",
+					        "僵硬免疫"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=92"
+					},
+					{
+					    id: 94,
+					    name: "[绿色四月]阿娜克",
+					    element: "红",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0006_anack_thumb_small.png",
+					    skills: [
+					        "击倒",
+					        "浮空",
+					        "霸体",
+					        "无视伤害",
+					        "暴击率增加",
+					        "暴击伤害增加",
+					        "攻击力增加",
+					        "减能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=83"
+					},
+					{
+					    id: 95,
+					    name: "[赤羽]阿米考洽斯",
+					    element: "红",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0105_amigocharz_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "体力增加",
+					        "攻速增加",
+					        "击倒",
+					        "攻击力增加",
+					        "防御力增加",
+					        "自身护盾",
+					        "自身回能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=82"
+					},
+					{
+					    id: 96,
+					    name: "[潜鱼]柳寒城",
+					    element: "红",
+					    job: "法师",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0107_yuhansung_thumb_small.png",
+					    skills: [
+					        "攻速减少",
+					        "移速减少",
+					        "霸体",
+					        "僵硬",
+					        "魔法抵抗减少",
+					        "暴击率增加",
+					        "必暴"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=90"
+					},
+					{
+					    id: 97,
+					    name: "[音乐家]黄黄",
+					    element: "红",
+					    job: "法师",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0151_yellow_thumb_small.png",
+					    skills: [
+					        "浮空",
+					        "击退",
+					        "封锁",
+					        "暴击率增加",
+					        "攻速增加",
+					        "自身回能",
+					        "技能中无敌",
+					        "暴击伤害增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=101"
+					},
+					{
+					    id: 98,
+					    name: "[黑魂]亚克雷普特",
+					    element: "红",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0207_arkraptor_thumb_small.png",
+					    skills: [
+					        "击退",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "僵硬免疫",
+					        "暴击率增加",
+					        "攻击力增加",
+					        "必暴"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=87"
+					},
+					{
+					    id: 99,
+					    name: "[医生]迈克",
+					    element: "红",
+					    job: "刺客",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0220_michael_thumb_small.png",
+					    skills: [
+					        "解除减益效果",
+					        "僵硬免疫",
+					        "眩晕免疫",
+					        "减益免疫",
+					        "攻击力增加",
+					        "麻痹",
+					        "阻断能量恢复",
+					        "中毒",
+					        "体力恢复减少",
+					        "能量恢复减少",
+					        "禁疗"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=96"
+					},
+					{
+					    id: 100,
+					    name: "[狂信徒]夏夏",
+					    element: "红",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0234_xiaxia_thumb_small.png",
+					    skills: [
+					        "解除减益效果",
+					        "自身回能",
+					        "失明",
+					        "我军护盾",
+					        "红属性攻击力增加",
+					        "沉默",
+					        "我军回能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=100"
+					},
+					{
+					    id: 101,
+					    name: "[狂犬天使]伦·梅伊",
+					    element: "红",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0246_ronmei_thumb_small.png",
+					    skills: [
+					        "我军护盾",
+					        "效果抵抗增加",
+					        "霸体",
+					        "击倒",
+					        "眩晕免疫",
+					        "沉默",
+					        "技能中无敌",
+					        "攻击力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=98"
+					},
+					{
+					    id: 102,
+					    name: "[被撕破的骄傲]维森特",
+					    element: "红",
+					    job: "刺客",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0417_vicente_thumb_small.png",
+					    skills: [
+					        "技能中无敌",
+					        "效果抵抗增加",
+					        "减伤",
+					        "回避减少",
+					        "效果抵抗减少",
+					        "命中增加",
+					        "效果命中增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=99"
+					},
+					{
+					    id: 103,
+					    name: "[红面具]花莲",
+					    element: "红",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0243_yuto_thumb_small.png",
+					    skills: [
+					        "击倒",
+					        "必中",
+					        "技能中无敌",
+					        "眩晕",
+					        "击退",
+					        "挑衅",
+					        "必定回避",
+					        "物理贯穿增加",
+					        "攻速增加",
+					        "霸体",
+					        "命中增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=93"
+					},
+					{
+					    id: 104,
+					    name: "[吉黑德公主]阿娜克",
+					    element: "红",
+					    job: "坦克",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0016_anaaklady_thumb_small.png",
+					    skills: [
+					        "魔法抵抗增加",
+					        "物理抵抗增加",
+					        "我军回能",
+					        "坦伤",
+					        "防御力增加",
+					        "自身护盾",
+					        "我军护盾",
+					        "自身回能",
+					        "急救无敌",
+					        "挑衅",
+					        "攻速增加",
+					        "攻击力增加",
+					        "恐惧"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=84"
+					},
+					{
+					    id: 105,
+					    name: "[长枪客]阿娜克",
+					    element: "红",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0244_anackspear_thumb_small.png",
+					    skills: [
+					        "禁疗",
+					        "防御力减少",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "自身护盾",
+					        "急速增加",
+					        "急速减少",
+					        "必中",
+					        "减能",
+					        "自身回能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=85"
+					},
+					{
+					    id: 106,
+					    name: "[堕落之翼]卡萨卢",
+					    element: "红",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0233_cassano_thumb_small.png",
+					    skills: [
+					        "浮空",
+					        "阻断能量恢复",
+					        "眩晕",
+					        "急速减少",
+					        "急速增加",
+					        "减能",
+					        "急救无敌",
+					        "防御力减少",
+					        "必中",
+					        "攻击力增加",
+					        "魔法贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=88"
+					},
+					{
+					    id: 107,
+					    name: "[梦的结晶]拉·切利",
+					    element: "红",
+					    job: "法师",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0436_cherry_thumb_small.webp",
+					    skills: [
+					        "浮空",
+					        "红属性抵抗减少",
+					        "回避增加",
+					        "红属性急速增加",
+					        "攻击力增加",
+					        "移速增加",
+					        "移速减少",
+					        "自身回能",
+					        "击退",
+					        "真伤",
+					        "剩余冷却减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=148"
+					},
+					{
+					    id: 108,
+					    name: "[序列者]003",
+					    element: "红",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0611_numbers003_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "锁血",
+					        "眩晕",
+					        "防御力减少",
+					        "吸血增加",
+					        "急速增加",
+					        "红属性抵抗减少",
+					        "自身回能",
+					        "红属性攻击增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=81"
+					},
+					{
+					    id: 109,
+					    name: "[序列者]002",
+					    element: "红",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0610_numbers002_thumb_small.png",
+					    skills: [
+					        "僵硬",
+					        "必暴",
+					        "霸体",
+					        "暴击伤害增加",
+					        "命中增加",
+					        "攻速增加",
+					        "移速减少",
+					        "技能中无敌",
+					        "物理抵抗减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=80"
+					},
+					{
+					    id: 110,
+					    name: "[战术师]雷诺·洛",
+					    element: "蓝",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0114_leroro_thumb_small.png",
+					    skills: [
+					        "僵硬",
+					        "眩晕",
+					        "急速减少",
+					        "防御力减少",
+					        "蓝属性攻击力增加",
+					        "魔法抵抗减少",
+					        "物理抵抗减少",
+					        "防御力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=122"
+					},
+					{
+					    id: 111,
+					    name: "[黑鳞]昆特",
+					    element: "蓝",
+					    job: "刺客",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0121_QuantBlitz_thumb_small.png",
+					    skills: [
+					        "技能中无敌",
+					        "急速增加",
+					        "命中减少",
+					        "僵硬",
+					        "回避增加",
+					        "必暴",
+					        "攻击力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=126"
+					},
+					{
+					    id: 112,
+					    name: "[选手]昆·哈齐灵",
+					    element: "蓝",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0159_hatzling_thumb_small.png",
+					    skills: [
+					        "技能中无敌",
+					        "僵硬",
+					        "急速增加",
+					        "防御力减少",
+					        "自身回能",
+					        "自身护盾",
+					        "霸体",
+					        "攻速增加",
+					        "攻击力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=119"
+					},
+					{
+					    id: 113,
+					    name: "[断术士]克鲁丹",
+					    element: "蓝",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0135_kurdan_thumb_small.png",
+					    skills: [
+					        "僵硬",
+					        "击倒",
+					        "沉默",
+					        "浮空",
+					        "霸体",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "减能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=121"
+					},
+					{
+					    id: 114,
+					    name: "[破灭之翼]姜虎亮",
+					    element: "蓝",
+					    job: "坦克",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0206_horyang_thumb_small.png",
+					    skills: [
+					        "自身护盾",
+					        "挑衅",
+					        "霸体",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "击退",
+					        "麻痹",
+					        "恐惧",
+					        "攻击力减少",
+					        "防御力增加",
+					        "减伤",
+					        "防御力减少",
+					        "我军霸体",
+					        "我军护盾"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=118"
+					},
+					{
+					    id: 115,
+					    name: "[雷丹]昆·兰",
+					    element: "蓝",
+					    job: "刺客",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0217_ran_thumb_small.png",
+					    skills: [
+					        "破盾",
+					        "霸体",
+					        "触电",
+					        "暴击率增加",
+					        "暴击伤害增加",
+					        "减伤",
+					        "急速增加",
+					        "必暴",
+					        "回避减少"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=120"
+					},
+					{
+					    id: 116,
+					    name: "[赤铃]卢比",
+					    element: "蓝",
+					    job: "坦克",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0218_novick_thumb_small.png",
+					    skills: [
+					        "物理抵抗增加",
+					        "封锁",
+					        "阻断急速增加",
+					        "霸体",
+					        "基本攻击打偏",
+					        "沉默",
+					        "攻击力减少",
+					        "攻速增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=124"
+					},
+					{
+					    id: 117,
+					    name: "[放火者]郭艾特洛",
+					    element: "蓝",
+					    job: "法师",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0231_quaetroblitz_thumb_small.png",
+					    skills: [
+					        "暴击伤害增加",
+					        "僵硬",
+					        "必暴",
+					        "霸体",
+					        "自身护盾",
+					        "攻击力增加",
+					        "体力恢复减少",
+					        "烧伤",
+					        "减伤"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=125"
+					},
+					{
+					    id: 118,
+					    name: "[独眼狼]波拉洛德",
+					    element: "蓝",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0232_blarode_thumb_small.png",
+					    skills: [
+					        "浮空",
+					        "防御力减少",
+					        "体力恢复减少",
+					        "急速减少",
+					        "回避增加",
+					        "击倒",
+					        "攻击力增加",
+					        "魔法抵抗减少",
+					        "物理抵抗减少",
+					        "减伤",
+					        "减能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=103"
+					},
+					{
+					    id: 119,
+					    name: "[总监]布朗",
+					    element: "蓝",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0262_blanc_thumb_small.png",
+					    skills: [
+					        "攻击力增加",
+					        "防御力增加",
+					        "绿属性抵抗增加",
+					        "恢复量增加",
+					        "自身回能",
+					        "我军霸体",
+					        "我军减益免疫"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=102"
+					},
+					{
+					    id: 120,
+					    name: "[预知之眼]霍克尼",
+					    element: "蓝",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0614_hockney_thumb_small.png",
+					    skills: [
+					        "回避增加",
+					        "防御力减少",
+					        "封锁",
+					        "我军回能",
+					        "攻击力增加",
+					        "暴击率增加",
+					        "暴击伤害增加",
+					        "必定回避",
+					        "自身回能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=106"
+					},
+					{
+					    id: 121,
+					    name: "[诅咒的枷锁]梅利奥达斯",
+					    element: "蓝",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0030_meliodas_thumb_small.png",
+					    skills: [
+					        "击倒",
+					        "技能中无敌",
+					        "限伤",
+					        "封锁",
+					        "阻断护盾",
+					        "减伤",
+					        "攻击力增加",
+					        "魔法贯穿增加",
+					        "自身回能",
+					        "魔法抵抗减少",
+					        "解除有害效果",
+					        "霸体"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=123"
+					},
+					{
+					    id: 122,
+					    name: "[永劫轮回]伊丽莎白",
+					    element: "蓝",
+					    job: "法师",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0031_elizabeth_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "浮空",
+					        "不被指定为攻击目标",
+					        "急救无敌",
+					        "攻击力增加",
+					        "自身护盾",
+					        "体力增加",
+					        "偷能",
+					        "僵硬",
+					        "防御力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=105"
+					},
+					{
+					    id: 123,
+					    name: "[红玫瑰]赫·宥莉",
+					    element: "绿",
+					    job: "坦克",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0004_hayuri_thumb_small.png",
+					    skills: [
+					        "技能中无敌",
+					        "僵硬",
+					        "急速减少",
+					        "击倒",
+					        "霸体",
+					        "防御力增加",
+					        "自身护盾",
+					        "封锁"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=139"
+					},
+					{
+					    id: 124,
+					    name: "[洞察者]洛雷",
+					    element: "绿",
+					    job: "法师",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0104_Laure_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "沉默",
+					        "自身护盾",
+					        "自身回能",
+					        "攻击力增加",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "魔法贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=130"
+					},
+					{
+					    id: 125,
+					    name: "[狂潮]罗珍尔",
+					    element: "绿",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0125_lozeal_thumb_small.png",
+					    skills: [
+					        "解除减益效果",
+					        "解除异常状态",
+					        "防御力增加",
+					        "防御力减少",
+					        "绿属性攻击力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=133"
+					},
+					{
+					    id: 126,
+					    name: "[开化之声]余美声",
+					    element: "绿",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0208_miseng_thumb_small.png",
+					    skills: [
+					        "霸体",
+					        "攻击力增加",
+					        "急速增加",
+					        "僵硬",
+					        "远程抵抗增加",
+					        "反伤",
+					        "眩晕",
+					        "自身护盾",
+					        "防御力增加",
+					        "偷能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=134"
+					},
+					{
+					    id: 127,
+					    name: "[投手]穆尔·勒伯",
+					    element: "绿",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0216_mule_thumb_small.png",
+					    skills: [
+					        "自身护盾",
+					        "攻击力增加",
+					        "霸体",
+					        "眩晕",
+					        "必中",
+					        "攻速增加",
+					        "自身回能",
+					        "急速增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=135"
+					},
+					{
+					    id: 128,
+					    name: "[飞毛腿]埃丁·丹",
+					    element: "绿",
+					    job: "刺客",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0219_edin_thumb_small.png",
+					    skills: [
+					        "急速增加",
+					        "技能中无敌",
+					        "眩晕",
+					        "回避增加",
+					        "攻击力增加",
+					        "僵硬",
+					        "减益免疫"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=127"
+					},
+					{
+					    id: 129,
+					    name: "[儿童]安德罗西",
+					    element: "绿",
+					    job: "刺客",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0013_endorsichild_thumb_small.png",
+					    skills: [
+					        "击倒",
+					        "技能中无敌",
+					        "阻断能量恢复",
+					        "减能",
+					        "攻击力增加",
+					        "僵硬",
+					        "击退",
+					        "必中",
+					        "解除减益效果",
+					        "召唤物",
+					        "斩杀",
+					        "自身复活",
+					        "自身护盾",
+					        "自身回能",
+					        "偷能",
+					        "防御力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=128"
+					},
+					{
+					    id: 130,
+					    name: "[甄选人员]雷诺·洛",
+					    element: "绿",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0012_leroroteen_thumb_small.png",
+					    skills: [
+					        "攻击力增加",
+					        "防御力增加",
+					        "减能",
+					        "麻痹",
+					        "魔法贯穿增加",
+					        "自身回能"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=131"
+					},
+					{
+					    id: 131,
+					    name: "[红蛇]西亚尔",
+					    element: "绿",
+					    job: "法师",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0402_shilial_thumb_small.png",
+					    skills: [
+					        "僵硬",
+					        "霸体",
+					        "回避增加",
+					        "命中增加",
+					        "命中掠夺",
+					        "回避掠夺",
+					        "绿属性攻击力增加",
+					        "必中",
+					        "必定回避",
+					        "自身回能",
+					        "物理贯穿增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=137"
+					},
+					{
+					    id: 132,
+					    name: "[红心神水]安德罗西",
+					    element: "绿",
+					    job: "坦克",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0034_endorsiheart_thumb_small.png",
+					    skills: [
+					        "体力增加",
+					        "魅惑",
+					        "霸体",
+					        "魔法抵抗减少",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "防御力增加",
+					        "防御力减少",
+					        "减伤"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=129"
+					},
+					{
+					    id: 133,
+					    name: "[金色猛兽]里亚尔",
+					    element: "绿",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0401_lilial_thumb_small.png",
+					    skills: [
+					        "麻痹",
+					        "出血",
+					        "霸体",
+					        "击倒",
+					        "眩晕",
+					        "召唤物",
+					        "攻击力增加",
+					        "防御力增加",
+					        "物理抵抗增加",
+					        "魔法抵抗增加",
+					        "必中",
+					        "自身护盾",
+					        "急救无敌"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=132"
+					},
+					{
+					    id: 134,
+					    name: "[金鲤]宙",
+					    element: "绿",
+					    job: "弓手",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0636_ju_thumb_small.webp",
+					    skills: [
+					        "攻速增加",
+					        "基本攻击贯穿增加",
+					        "召唤物",
+					        "自身隐身",
+					        "技能中无敌",
+					        "绿属性抵抗减少",
+					        "绿属性攻击力增加",
+					        "自身回能",
+					        "沉默",
+					        "急救无敌"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=157"
+					},
+					{
+					    id: 135,
+					    name: "[末日引导者]妍熙",
+					    element: "绿",
+					    job: "辅助",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0025_yeonhee_thumb_small.png",
+					    skills: [
+					        "浮空",
+					        "魔法抵抗减少",
+					        "沉默",
+					        "绿属性抵抗减少",
+					        "沉睡",
+					        "自身回能",
+					        "急救无敌"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=138"
+					},
+					{
+					    id: 136,
+					    name: "[百花魔剑]赛因",
+					    element: "绿",
+					    job: "战士",
+					    rarity: "SSR",
+					    image: "https://conowen.com/tognw/units/images/thumbnails/0026_shane_thumb_small.png",
+					    skills: [
+					        "僵硬",
+					        "暴击率增加",
+					        "技能中无敌",
+					        "不被指定为攻击目标",
+					        "移速减少",
+					        "暴击伤害掠夺",
+					        "浮空",
+					        "绿属性抵抗减少",
+					        "暴击抵抗减少",
+					        "攻击力增加"
+					    ],
+					    link: "https://conowen.com/tognw/units/unit.php?id=136"
+					}
+                ]);
+
+                // 2. 自动从角色列表中提取所有不重复的技能词条
+                const predefinedSkills = computed(() => {
+                    const allSkills = new Set();
+                    characters.value.forEach(char => {
+                        if(char.skills && Array.isArray(char.skills)) {
+                            char.skills.forEach(skill => allSkills.add(skill));
+                        }
+                    });
+                    // 将 Set 转为数组并排序
+                    return Array.from(allSkills).sort();
+                });
+				
+				const selectSkill = (skill) => {
+				                    skillSearch.value = skill;   // 1. 填入搜索词
+				                    showSuggestions.value = false; // 2. 立刻关闭下拉菜单
+				                };
+								
+                const elements = ["黄", "紫", "红", "蓝", "绿"];
+                const jobs = ["坦克", "战士", "刺客", "弓手", "法师", "辅助"];
+                const rarities = ["EX", "SSR+", "XSR+", "SSR", "SR", "R"];
+
+				const skillSearch = ref(""); // 搜索框输入的内容
+                const showSuggestions = ref(false); // 控制下拉菜单显示
+				
+
+				
+                const selectedElement = ref("");
+                const selectedJob = ref("");
+                const selectedRarity = ref("");
+				
+				const suggestedSkills = computed(() => {
+                    // 如果搜索框是空的，直接返回所有词条
+                    if (!skillSearch.value) {
+                        return predefinedSkills.value;
+                    }
+                    // 如果有输入，则进行模糊过滤
+                    return predefinedSkills.value.filter(skill => 
+                        skill.includes(skillSearch.value)
+                    );
+                });
+				
+				const filteredCharacters = computed(() => {
+                    return characters.value.filter(char => {
+                        if (selectedElement.value && char.element !== selectedElement.value) return false;
+                        if (selectedJob.value && char.job !== selectedJob.value) return false;
+                        if (selectedRarity.value && char.rarity !== selectedRarity.value) return false;
+                        
+                        // 【核心修改】模糊匹配逻辑
+                        // 如果输入了搜索词，只要角色的技能组里 有任意一个技能 包含了 搜索词，就保留该角色
+                        if (skillSearch.value) {
+                            const hasMatchingSkill = char.skills.some(skill => 
+                                skill.includes(skillSearch.value)
+                            );
+                            if (!hasMatchingSkill) return false;
+                        }
+                        
+                        return true;
+                    });
+                });
+
+                return {
+                    characters,
+                    predefinedSkills, // 导出自动计算的技能列表
+                    elements,
+                    jobs,
+                    rarities,
+					skillSearch,     
+                    showSuggestions,  
+                    suggestedSkills,
+                    selectedElement,
+                    selectedJob,
+                    selectedRarity,
+					selectSkill,
+                    filteredCharacters,
+					elementIcons,
+					jobIcons,
+					rarityIcons
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
